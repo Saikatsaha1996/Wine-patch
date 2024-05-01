@@ -1,0 +1,530 @@
+diff --git a/dlls/crypt32/unixlib.c b/dlls/crypt32/unixlib.c
+index 72770ca..0d81fe2 100644
+--- a/dlls/crypt32/unixlib.c
++++ b/dlls/crypt32/unixlib.c
+@@ -619,6 +619,7 @@ static const char * const CRYPT_knownLocations[] = {
+  "/usr/local/share/certs/",
+  "/etc/sfw/openssl/certs",
+  "/etc/security/cacerts",  /* Android */
++ "@TERMUX_PREFIX@/etc/tls" /* Termux */
+ };
+ 
+ static void load_root_certs(void)
+diff --git a/dlls/dbghelp/macho_module.c b/dlls/dbghelp/macho_module.c
+index 90c38b5..7e054f2 100644
+--- a/dlls/dbghelp/macho_module.c
++++ b/dlls/dbghelp/macho_module.c
+@@ -1624,7 +1624,7 @@ static BOOL macho_search_and_load_file(struct process* pcs, const WCHAR* filenam
+     {
+         const WCHAR* fallback = process_getenv(pcs, L"DYLD_FALLBACK_LIBRARY_PATH");
+         if (!fallback)
+-            fallback = L"/usr/local/lib:/lib:/usr/lib";
++            fallback = L"@TERMUX_PREFIX@/lib:/usr/local/lib:/lib:/usr/lib";
+         ret = search_unix_path(p, fallback, macho_load_file_cb, &load_params);
+     }
+     if (!ret && p == filename)
+diff --git a/dlls/dbghelp/module.c b/dlls/dbghelp/module.c
+index d06c441..def6094 100644
+--- a/dlls/dbghelp/module.c
++++ b/dlls/dbghelp/module.c
+@@ -677,10 +677,10 @@ static struct image_file_map* image_locate_build_id_target(const BYTE* id, unsig
+     fmap_link = HeapAlloc(GetProcessHeap(), 0, sizeof(*fmap_link));
+     if (!fmap_link) return NULL;
+ 
+-    p = malloc(sizeof(L"/usr/lib/debug/.build-id/") +
++    p = malloc(sizeof(L"@TERMUX_PREFIX@//lib/debug/.build-id/") +
+                (idlen * 2 + 1) * sizeof(WCHAR) + sizeof(L".debug"));
+     if (!p) goto fail;
+-    wcscpy(p, L"/usr/lib/debug/.build-id/");
++    wcscpy(p, L"@TERMUX_PREFIX@//lib/debug/.build-id/");
+     z = p + wcslen(p);
+     if (idlen)
+     {
+@@ -784,7 +784,7 @@ struct image_file_map* image_load_debugaltlink(struct image_file_map* fmap, stru
+                 if (!ret)
+                 {
+                     dst = HeapAlloc(GetProcessHeap(), 0,
+-                                    sizeof(L"/usr/lib/debug/.build-id/") + (3 + filename_len + idlen * 2) * sizeof(WCHAR));
++                                    sizeof(L"@TERMUX_PREFIX@/lib/debug/.build-id/") + (3 + filename_len + idlen * 2) * sizeof(WCHAR));
+                     if (dst)
+                     {
+                         WCHAR* p;
+@@ -794,7 +794,7 @@ struct image_file_map* image_load_debugaltlink(struct image_file_map* fmap, stru
+                          * where the alternate file is...
+                          * so try both
+                          */
+-                        p = memcpy(dst, L"/usr/lib/debug/.build-id/", sizeof(L"/usr/lib/debug/.build-id/"));
++                        p = memcpy(dst, L"@TERMUX_PREFIX@/lib/debug/.build-id/", sizeof(L"@TERMUX_PREFIX@/lib/debug/.build-id/"));
+                         p += wcslen(dst);
+                         MultiByteToWideChar(CP_UNIXCP, 0, data, -1, p, filename_len);
+                         ret = image_check_debug_link_gnu_id(dst, fmap_link, id, idlen);
+diff --git a/dlls/msvcrt/tests/environ.c b/dlls/msvcrt/tests/environ.c
+index 1d1bfd2..8784fba 100644
+--- a/dlls/msvcrt/tests/environ.c
++++ b/dlls/msvcrt/tests/environ.c
+@@ -43,7 +43,8 @@ static const char *a_very_long_env_string =
+  "/lib/mingw32/3.4.2/;"
+  "/lib/;"
+  "/usr/lib/mingw32/3.4.2/;"
+- "/usr/lib/";
++ "/usr/lib/;"
++ "@TERMUX_PREFIX@/lib/";
+ 
+ static char ***(__cdecl *p__p__environ)(void);
+ static WCHAR ***(__cdecl *p__p__wenviron)(void);
+diff --git a/dlls/ntdll/unix/loader.c b/dlls/ntdll/unix/loader.c
+index 06959fa..75c632a 100644
+--- a/dlls/ntdll/unix/loader.c
++++ b/dlls/ntdll/unix/loader.c
+@@ -74,7 +74,7 @@
+ #  define _POSIX_SPAWN_DISABLE_ASLR 0x0100
+ # endif
+ #endif
+-#ifdef __ANDROID__
++#if defined(__ANDROID__) && ! defined(__TERMUX__)
+ # include <jni.h>
+ #endif
+ extern char **environ;
+@@ -438,7 +438,7 @@ static void init_paths( char *argv[] )
+     if (!(build_dir = remove_tail( ntdll_dir, "/dlls/ntdll" )))
+     {
+         if (!(dll_dir = remove_tail( ntdll_dir, so_dir ))) dll_dir = ntdll_dir;
+-#if (defined(__linux__) && !defined(__ANDROID__)) || defined(__FreeBSD_kernel__) || defined(__NetBSD__)
++#if (defined(__linux__) && !(defined(__ANDROID__) && ! defined(__TERMUX__))) || defined(__FreeBSD_kernel__) || defined(__NetBSD__)
+         bin_dir = realpath_dirname( "/proc/self/exe" );
+ #elif defined (__FreeBSD__) || defined(__DragonFly__)
+         {
+@@ -1823,7 +1823,7 @@ static void start_main_thread(void)
+     server_init_process_done();
+ }
+ 
+-#ifdef __ANDROID__
++#if defined(__ANDROID__) && ! defined(__TERMUX__)
+ 
+ #ifndef WINE_JAVA_CLASS
+ #define WINE_JAVA_CLASS "org/winehq/wine/WineActivity"
+@@ -2020,7 +2020,7 @@ static void apple_main_thread(void)
+ #endif  /* __APPLE__ */
+ 
+ 
+-#ifdef __ANDROID__
++#if defined(__ANDROID__) && ! defined(__TERMUX__)
+ 
+ static int pre_exec(void)
+ {
+@@ -2139,6 +2139,13 @@ DECLSPEC_EXPORT void __wine_main( int argc, char *argv[], char *envp[] )
+             static char noexec[] = "WINELOADERNOEXEC=1";
+             char **new_argv = malloc( (argc + 2) * sizeof(*argv) );
+ 
++#ifdef _WIN64
++            {
++                Dl_info info = { 0 };
++                dladdr(&__wine_main, &info);
++                setenv("LD_PRELOAD", info.dli_fname, 1);
++            }
++#endif
+             memcpy( new_argv + 1, argv, (argc + 1) * sizeof(*argv) );
+             putenv( noexec );
+             loader_exec( new_argv, current_machine );
+diff --git a/dlls/ntdll/unix/server.c b/dlls/ntdll/unix/server.c
+index f3ffd99..5a96473 100644
+--- a/dlls/ntdll/unix/server.c
++++ b/dlls/ntdll/unix/server.c
+@@ -1237,10 +1237,10 @@ static const char *init_server_dir( dev_t dev, ino_t ino )
+ {
+     char *dir = NULL;
+ 
+-#ifdef __ANDROID__  /* there's no /tmp dir on Android */
++#if defined(__ANDROID__) && ! defined(__TERMUX__)  /* there's no /tmp dir on Android */
+     asprintf( &dir, "%s/.wineserver/server-%llx-%llx", config_dir, (unsigned long long)dev, (unsigned long long)ino );
+ #else
+-    asprintf( &dir, "/tmp/.wine-%u/server-%llx-%llx", getuid(), (unsigned long long)dev, (unsigned long long)ino );
++    asprintf( &dir, "@TERMUX_PREFIX@/tmp/.wine-%u/server-%llx-%llx", getuid(), (unsigned long long)dev, (unsigned long long)ino );
+ #endif
+     return dir;
+ }
+@@ -1282,8 +1282,10 @@ static int setup_config_dir(void)
+     if (!mkdir( "dosdevices", 0777 ))
+     {
+         mkdir( "drive_c", 0777 );
++        mkdir( "drive_d", 0777 );
++        symlink( "/sdcard", "dosdevices/d:" );
+         symlink( "../drive_c", "dosdevices/c:" );
+-        symlink( "/", "dosdevices/z:" );
++        symlink( "/data/data/com.termux/files", "dosdevices/z:" );
+     }
+     else if (errno != EEXIST) fatal_perror( "cannot create %s/dosdevices", config_dir );
+ 
+diff --git a/dlls/ntdll/unix/socket.c b/dlls/ntdll/unix/socket.c
+index 65f3075..afe3828 100644
+--- a/dlls/ntdll/unix/socket.c
++++ b/dlls/ntdll/unix/socket.c
+@@ -54,7 +54,7 @@
+ #  include <linux/types.h>
+ # endif
+ # include <linux/ipx.h>
+-# ifdef SOL_IPX
++# if defined(SOL_IPX) && !defined(__ANDROID__)
+ #  define HAS_IPX
+ # endif
+ #endif
+diff --git a/dlls/ntdll/unix/virtual.c b/dlls/ntdll/unix/virtual.c
+index 4b23d99..f923c91 100644
+--- a/dlls/ntdll/unix/virtual.c
++++ b/dlls/ntdll/unix/virtual.c
+@@ -163,9 +163,9 @@ static void *address_space_start = (void *)0x110000; /* keep DOS area clear */
+ static void *address_space_start = (void *)0x10000;
+ #endif
+ #ifdef _WIN64
+-static void *address_space_limit = (void *)0x7fffffff0000;  /* top of the total available address space */
+-static void *user_space_limit    = (void *)0x7fffffff0000;  /* top of the user address space */
+-static void *working_set_limit   = (void *)0x7fffffff0000;  /* top of the current working set */
++static void *address_space_limit = (void *)0x7fffff0000;  /* top of the total available address space */
++static void *user_space_limit    = (void *)0x7fffff0000;  /* top of the user address space */
++static void *working_set_limit   = (void *)0x7fffff0000;  /* top of the current working set */
+ #else
+ static void *address_space_limit = (void *)0xc0000000;
+ static void *user_space_limit    = (void *)0x7fff0000;
+@@ -219,6 +219,240 @@ struct range_entry
+ static struct range_entry *free_ranges;
+ static struct range_entry *free_ranges_end;
+ 
++#ifdef _WIN64
++
++#include <sys/syscall.h>
++#include <stdatomic.h>
++#include <stdint.h>
++
++
++static void* mmap_native(void *addr, size_t size, int prot, int flags, int fd, off_t offset)
++{
++    return (void*)syscall(SYS_mmap, addr, size, prot, flags, fd, offset);
++}
++
++static int munmap_native(void* addr, size_t size)
++{
++    return (int)syscall(SYS_munmap, addr, size);
++}
++
++#define EXTMEM_LIMIT_HIGH 0x100000000
++#define EXTMEM_LIMIT_LOW  0x080000000
++#define EXTMEM_PAGE_INDEX(x) (((size_t)(x) - EXTMEM_LIMIT_LOW) / page_size)
++#define EXTMEM_GET_FLAG(x)   ((1 << (x)) - 1)
++
++static uint8_t* external_memory_flags;
++static size_t external_page_count;
++
++static volatile atomic_flag mmap_flag = ATOMIC_FLAG_INIT;
++
++static inline void mmap_lock(void)
++{
++    while (atomic_flag_test_and_set(&mmap_flag));
++}
++
++static inline void mmap_unlock(void)
++{
++    atomic_flag_clear(&mmap_flag);
++}
++
++static void set_external_page_flags(size_t page_start, size_t page_count)
++{
++    size_t page_end = page_start + page_count;
++    size_t page_1 = (page_start + 8) & (size_t)~7;
++    size_t page_2 = page_end & (size_t)~7;
++    uint8_t flags;
++    if (page_end <= page_1)
++    {
++        flags = EXTMEM_GET_FLAG(page_count) << (page_start & 7);
++        external_memory_flags[page_start >> 3] |= flags;
++        return;
++    }
++    flags = EXTMEM_GET_FLAG(page_1 - page_start) << (page_start & 7);
++    external_memory_flags[page_start >> 3] |= flags;
++    flags = EXTMEM_GET_FLAG(page_end - page_2);
++    external_memory_flags[page_end >> 3]   |= flags;
++    if (page_1 < page_2)
++    {
++        memset(external_memory_flags + (page_1 >> 3), -1, (page_2 - page_1) >> 3);
++    }
++}
++
++static void clear_external_page_flags(size_t page_start, size_t page_count)
++{
++    size_t page_end = page_start + page_count;
++    size_t page_1 = (page_start + 8) & (size_t)~7;
++    size_t page_2 = page_end & (size_t)~7;
++    uint8_t flags;
++    if (page_end <= page_1)
++    {
++        flags = EXTMEM_GET_FLAG(page_count) << (page_start & 7);
++        external_memory_flags[page_start >> 3] &= (uint8_t)~flags;
++        return;
++    }
++    flags = EXTMEM_GET_FLAG(page_1 - page_start) << (page_start & 7);
++    external_memory_flags[page_start >> 3] &= (uint8_t)~flags;
++    flags = EXTMEM_GET_FLAG(page_end - page_2);
++    external_memory_flags[page_end >> 3]   &= (uint8_t)~flags;
++    if (page_1 < page_2)
++    {
++        memset(external_memory_flags + (page_1 >> 3), 0, (page_2 - page_1) >> 3);
++    }
++}
++
++__attribute__((constructor)) void reserve_external_memory(void)
++{
++    size_t n;
++    mmap_native((void*)EXTMEM_LIMIT_LOW, EXTMEM_LIMIT_HIGH - EXTMEM_LIMIT_LOW, PROT_NONE, MAP_FIXED | MAP_PRIVATE | MAP_ANON | MAP_NORESERVE, -1, 0 );
++    external_page_count = (EXTMEM_LIMIT_HIGH - EXTMEM_LIMIT_LOW) / page_size;
++    n = external_page_count + page_size - 1;
++    n -= n % page_size;
++    external_memory_flags = mmap_native(NULL, n, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
++    memset(external_memory_flags, 0, n);
++}
++
++
++static size_t check_external_page_free(size_t page_start, size_t page_count)
++{
++    size_t i;
++    const size_t page_end = page_start + page_count;
++    for (i = page_start; i < page_end;)
++    {
++        uint8_t* pflags = external_memory_flags + (i >> 3);
++        if (!((i & 63) || *(uint64_t*)pflags))
++        {
++            i += 64;
++        }
++        else if (!((i & 31) || *(uint32_t*)pflags))
++        {
++            i += 32;
++        }
++        else if (!((i & 15) || *(uint16_t*)pflags))
++        {
++            i += 16;
++        }
++        else
++        {
++            const uint8_t flags = *pflags;
++            const size_t k = i & 7;
++            if (!(k || flags))
++                i += 8;
++            else if (flags >> k & 1)
++                break;
++            else
++                ++i;
++        }
++    }
++    return i < page_end ? i - page_start : page_count;
++}
++
++static size_t get_external_free_page(size_t page_count)
++{
++    size_t i;
++    for (i = 0; i < external_page_count;)
++    {
++        uint8_t* pflags = external_memory_flags + (i >> 3);
++        if (!((i & 63) || (uint64_t)~*(uint64_t*)pflags))
++        {
++            i += 64;
++        }
++        else if (!((i & 31) || (uint32_t)~*(uint32_t*)pflags))
++        {
++            i += 32;
++        }
++        else if (!((i & 15) || (uint16_t)~*(uint16_t*)pflags))
++        {
++            i += 16;
++        }
++        else
++        {
++            const uint8_t flags = *pflags;
++            const size_t k = i & 7;
++            if (!(k || (uint8_t)~flags))
++                i += 8;
++            else if (flags >> k & 1)
++                ++i;
++            else
++            {
++                size_t j = check_external_page_free(i, page_count);
++                if (j == page_count) return i;
++                i += j;
++            }
++        }
++    }
++    return (size_t)-1;
++}
++
++void *mmap64(void *addr, size_t size, int prot, int flags, int fd, off64_t offset)
++{
++    void* ret = NULL;
++    if (!size) return (void*)EXTMEM_LIMIT_LOW;
++    if ((size_t)addr < EXTMEM_LIMIT_HIGH && (size_t)addr + size > EXTMEM_LIMIT_HIGH)
++    {
++        FIXME("External mmap Memory cannot cross 0x100000000\n");
++        return NULL;
++    }
++    if ((size_t)addr < EXTMEM_LIMIT_LOW && (size_t)addr + size > EXTMEM_LIMIT_LOW)
++    {
++        FIXME("External mmap Memory cannot cross 0x80000000\n");
++        return NULL;
++    }
++    if (wow_peb && (!addr || ((size_t)addr >= EXTMEM_LIMIT_LOW && (size_t)addr < EXTMEM_LIMIT_HIGH)))
++    {
++        const size_t page_count = (size + page_size - 1) / page_size;
++        size_t page_index;
++        int f = flags | MAP_FIXED;
++        ret = addr;
++        mmap_lock();
++        if (ret)
++        {
++            page_index = EXTMEM_PAGE_INDEX(ret);
++            if (page_count != check_external_page_free(page_index, page_count))
++                goto finish;
++#if MAP_FIXED_NOREPLACE
++            if (f & MAP_FIXED_NOREPLACE) f &= ~MAP_FIXED_NOREPLACE;
++#endif
++        }
++        else
++        {
++            page_index = get_external_free_page(page_count);
++            if ((size_t)-1 == page_index) goto finish;
++            ret = (void*)(EXTMEM_LIMIT_LOW + page_index * page_size);
++        }
++        ret = mmap_native( ret, size, prot, f, fd, offset );
++        if ((void*)ret == (void*)-1 || !ret) ret = NULL;
++        else set_external_page_flags(page_index, page_count);
++finish:
++        mmap_unlock();
++    }
++    return ret ? ret : mmap_native( addr, size, prot, flags, fd, offset);
++}
++
++void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset)
++{
++    return mmap64(addr, length, prot, flags, fd, offset);
++}
++
++int munmap(void* addr, size_t size)
++{
++    if (wow_peb && (size_t)addr >= EXTMEM_LIMIT_LOW && (size_t)addr < EXTMEM_LIMIT_HIGH)
++    {
++        const size_t page_index = EXTMEM_PAGE_INDEX(addr);
++        const size_t page_count = (size + page_size - 1) / page_size;
++        mmap_lock();
++        mmap_native( addr, size, PROT_NONE, MAP_FIXED | MAP_PRIVATE | MAP_ANON | MAP_NORESERVE, -1, 0 );
++        clear_external_page_flags(page_index, page_count);
++        mmap_unlock();
++        return 0;
++    }
++    return munmap_native(addr, size);
++}
++
++#define mmap(addr, size, prot, flags, fd, offset) mmap_native(addr, size, prot, flags, fd, offset)
++
++#define munmap(addr, size) munmap_native(addr, size)
++
++#endif
+ 
+ static inline BOOL is_beyond_limit( const void *addr, size_t size, const void *limit )
+ {
+diff --git a/dlls/winepulse.drv/pulse.c b/dlls/winepulse.drv/pulse.c
+index 62658fc..26840a1 100644
+--- a/dlls/winepulse.drv/pulse.c
++++ b/dlls/winepulse.drv/pulse.c
+@@ -231,12 +231,16 @@ static int pulse_poll_func(struct pollfd *ufds, unsigned long nfds, int timeout,
+ 
+ static NTSTATUS pulse_process_attach(void *args)
+ {
++#ifdef __ANDROID__
++    if (1)
++#else
+     pthread_mutexattr_t attr;
+ 
+     pthread_mutexattr_init(&attr);
+     pthread_mutexattr_setprotocol(&attr, PTHREAD_PRIO_INHERIT);
+ 
+     if (pthread_mutex_init(&pulse_mutex, &attr) != 0)
++#endif
+         pthread_mutex_init(&pulse_mutex, NULL);
+ 
+ #ifdef _WIN64
+diff --git a/loader/preloader.c b/loader/preloader.c
+index d0551ba..2f8eede 100644
+--- a/loader/preloader.c
++++ b/loader/preloader.c
+@@ -1447,7 +1447,7 @@ void* wld_start( void **stack )
+         {
+             /* don't warn for low 64k */
+             if (preload_info[i].addr >= (void *)0x10000
+-#ifdef __aarch64__
++#if 1
+                 && preload_info[i].addr < (void *)0x7fffffffff /* ARM64 address space might end here*/
+ #endif
+             )
+diff --git a/programs/winebrowser/main.c b/programs/winebrowser/main.c
+index 2441607..baf8cad 100644
+--- a/programs/winebrowser/main.c
++++ b/programs/winebrowser/main.c
+@@ -116,6 +116,7 @@ static int open_http_url( const WCHAR *url )
+ {
+     static const WCHAR defaultbrowsers[] =
+         L"xdg-open\0"
++        "@TERMUX_PREFIX@/bin/open\0"
+         "/usr/bin/open\0"
+         "firefox\0"
+         "konqueror\0"
+@@ -141,7 +142,8 @@ static int open_http_url( const WCHAR *url )
+ static int open_mailto_url( const WCHAR *url )
+ {
+     static const WCHAR defaultmailers[] =
+-        L"/usr/bin/open\0"
++        L"@TERMUX_PREFIX@/bin/open"
++        "/usr/bin/open\0"
+         "xdg-email\0"
+         "mozilla-thunderbird\0"
+         "thunderbird\0"
+diff --git a/programs/winemenubuilder/winemenubuilder.c b/programs/winemenubuilder/winemenubuilder.c
+index 36569fa..55257d4 100644
+--- a/programs/winemenubuilder/winemenubuilder.c
++++ b/programs/winemenubuilder/winemenubuilder.c
+@@ -1724,7 +1724,7 @@ static BOOL build_native_mime_types(struct list *mime_types)
+     if (_wgetenv( L"XDG_DATA_DIRS" ))
+         dirs = xwcsdup( _wgetenv( L"XDG_DATA_DIRS" ));
+     else
+-        dirs = xwcsdup( L"/usr/local/share/:/usr/share/" );
++        dirs = xwcsdup( L"@TERMUX_PREFIX@/share:/usr/local/share/:/usr/share/" );
+ 
+     ret = add_mimes(xdg_data_dir, mime_types);
+     if (ret)
+diff --git a/server/request.c b/server/request.c
+index 2691e0c..d23be69 100644
+--- a/server/request.c
++++ b/server/request.c
+@@ -644,11 +644,13 @@ static char *create_server_dir( int force )
+ 
+     /* create the base directory if needed */
+ 
+-#ifdef __ANDROID__  /* there's no /tmp dir on Android */
++//#ifdef __ANDROID__  /* there's no /tmp dir on Android */
++#if defined(__ANDROID__) && ! defined(__TERMUX__)  /* there's no /tmp dir on Android */
+     if (asprintf( &base_dir, "%s/.wineserver", config_dir ) == -1)
+         fatal_error( "out of memory\n" );
+ #else
+-    if (asprintf( &base_dir, "/tmp/.wine-%u", getuid() ) == -1)
++    //if (asprintf( &base_dir, "/tmp/.wine-%u", getuid() ) == -1)
++    if (asprintf( &base_dir, "@TERMUX_PREFIX@/tmp/.wine-%u", getuid() ) == -1)
+         fatal_error( "out of memory\n" );
+ #endif
+     create_dir( base_dir, &st2 );
+diff --git a/server/sock.c b/server/sock.c
+index 8a95cad..e2d2d62 100644
+--- a/server/sock.c
++++ b/server/sock.c
+@@ -71,7 +71,7 @@
+ #  include <linux/types.h>
+ # endif
+ # include <linux/ipx.h>
+-# ifdef SOL_IPX
++# if defined(SOL_IPX) && !defined(__ANDROID__)
+ #  define HAS_IPX
+ # endif
+ #endif
